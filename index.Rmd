@@ -1,0 +1,255 @@
+---
+title: "Practical Machine Learning Course Projekt"
+author: "Martin Darms"
+date: "3. Februar 2016"
+output: html_document
+---
+
+
+<body>
+<h1>Practical Machine Learning Assignment</h1>
+
+<p>
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.</p>
+
+<p>I used R version v3.2.3 (2015-12-10) 64 bit (Windows Version)</p>
+
+<p>Load the Caret library and set the random number generator seed:</p>
+
+<pre><code class="r">library(caret)
+set.seed(10007)
+</code></pre>
+
+<p>Reading from file and clean up the data</p>
+<p>Set the directory to the correct folder, Use \\\ for Windows</p>
+<pre><code class="r">setwd("D:\\Data\\Coursera\\01 Practical Machine Learning\\Week 4\\Assignment")</code></pre>
+
+ 
+<p>Read the data, inserting NAs from the string &ldquo;NA&rdquo; and empty fields; trim whitespace.</p>
+
+<pre><code class="r">
+trainingData <- read.csv("pml-training.csv", header=T, na.strings=c("NA", "#DIV/0!"))
+testingData  <- read.csv("pml-testing.csv",  header=T, na.strings=c("NA", "#DIV/0!"))
+</code></pre>
+
+
+<pre><code>
+dim(trainingData)
+## [1] 19622   160
+</code></pre>
+
+<pre><code>
+dim(testingData)
+## [1] 20   160
+</code></pre>
+
+<p>The data frame returned by reading the file has 19622 rows and 160 columns.
+Deleting all columns with an NA, as well as metadata and time-related ones.</p>
+
+<pre><code class="r">
+processedTrainingData <- trainingData
+processedTrainingData <- processedTrainingData[, unlist(lapply(processedTrainingData, function(x) !any(is.na(x))))]
+
+processedTestingData <- testingData
+processedTestingData <- processedTestingData[, unlist(lapply(processedTestingData, function(x) !any(is.na(x))))]
+
+
+dim(processedTrainingData)
+## [1] 19622    60
+
+# remove uncessecary stuff
+processedTrainingData <-processedTrainingData[,-c(1:7)]
+processedTestingData  <-processedTestingData [,-c(1:7)]
+
+dim(processedTrainingData)
+
+## [1] 19622    53
+
+dim(processedTestingData)
+
+## [1] 20    53
+</code></pre>
+
+<p>Now, the data set has been optimized. If you take the whole data set, then first is takes too long and the algorithm produces errors.
+I use 70% for training, and 30% for cross validation.
+</p>
+
+<pre><code class="r">
+inTrain  &lt;- createDataPartition(processedTrainingData$classe, p=0.7, list=F)
+training &lt;- processedTrainingData[inTrain,]
+testing  &lt;- processedTrainingData[-inTrain,]
+</code></pre>
+
+<h2>Training a Random Forest Model</h2>
+
+<p>I use  the Random Forest model to train the training set. In addition, I measure the time to train. It might take up to 5 minutes to train with the parallel method... (coffee break)
+
+Without the parallelisation,e.g. without the "ctrl", it really took "Time difference of 52.29559 mins"!!. More than a coffee break :-)
+In the following sentences, the long calculation time is indiated as "LONG" </p>
+
+<pre><code class="r">
+start.time <- Sys.time()
+ctrl  <- trainControl(allowParallel=T, method="cv", number=4)
+model <- train(classe ~ ., data=training, model="rf", trControl=ctrl)
+pred  <- predict(model, newdata=testing)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+## Time difference of 6.528843 mins
+</code></pre>
+
+<p>Check the predictions against the held-back test-set.</p>
+<pre><code class="r">sum(pred == testing$classe) / length(pred)
+</code></pre>
+
+<pre><code>## [1]  0.9932031
+## [1]  0.9947324 "LONG"
+
+</code></pre>
+
+<pre><code class="r">confusionMatrix(testing$classe, pred)$table
+</code></pre>
+
+<pre><code>##           Reference
+## Prediction   A    B    C    D    E
+## 	        A 1674    0    0    0    0
+##       	B    2 1135    2    0    0
+##       	C    0    5 1018    3    0
+##       	D    0    0   17  946    1
+##       	E    0    0    1    0 1081
+</code></pre>	 
+
+
+<pre><code>##           Reference   "LONG"
+## Prediction   A    B    C    D    E
+##       	A 1674    0    0    0    0
+##       	B    7 1132    0    0    0
+##       	C    0    9 1016    1    0
+##       	D    0    0   18  946    0
+##       	E    0    0    4    1 1077
+</code></pre>
+
+<p>So our trained model is 99.32%/99.47% accurate against our test-set and this is confirmed by the confusion matrix. This is very accurate. The non-parallel calucation is a bit more precise. In the case of predictions, both methods delivered the same results: 20/20 correct. The confusion matrix is slighty different as well.</p>
+
+<pre><code class="r">
+predict(model, newdata=processedTestingData)
+</code></pre>
+
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-12
+## Type rfNews() to see new features/changes/bug fixes.
+</code></pre>				 
+<pre><code>##  [1] B A B A A E D B A A B C B A E E A B B B
+## Levels: A B C D E
+</code></pre>
+
+<p>Which variables are most important in this model?</p>
+
+<pre><code class="r">varImp(model)
+</code></pre>
+
+<pre><code>## rf variable importance
+## 
+##   only 20 most important variables shown (out of 52)
+## 
+##                      Overall
+## roll_belt              100.0
+## pitch_forearm           58.3
+## yaw_belt                55.8
+## magnet_dumbbell_y       44.5
+## pitch_belt              43.8
+## magnet_dumbbell_z       42.3
+## roll_forearm            39.0
+## accel_dumbbell_y        20.7
+## roll_dumbbell           17.4
+## magnet_dumbbell_x       16.4
+## accel_forearm_x         16.1
+## magnet_belt_z           15.8
+## total_accel_dumbbell    14.4
+## magnet_forearm_z        13.3
+## accel_dumbbell_z        12.6
+## magnet_belt_y           12.3
+## accel_belt_z            12.0
+## yaw_arm                 11.2
+## gyros_belt_z            10.9
+## magnet_belt_x           10.3
+</code></pre>
+
+
+<pre><code>## rf variable importance  "LONG"
+> varImp(model)
+## rf variable importance
+## 
+## only 20 most important variables shown (out of 52)
+## 
+##                    Overall
+## roll_belt             100.00
+## yaw_belt               85.87
+## magnet_dumbbell_z      74.05
+## pitch_belt             66.89
+## magnet_dumbbell_y      66.81
+## pitch_forearm          60.94
+## magnet_dumbbell_x      56.23
+## roll_forearm           53.06
+## accel_belt_z           48.00
+## magnet_belt_z          46.02
+## roll_dumbbell          45.97
+## accel_dumbbell_y       45.04
+## magnet_belt_y          44.47
+## accel_dumbbell_z       38.29
+## roll_arm               37.39
+## accel_forearm_x        36.00
+## yaw_dumbbell           32.84
+## total_accel_dumbbell   31.40
+## gyros_belt_z           30.56
+## accel_dumbbell_x       30.51
+
+</code></pre>
+
+
+<pre><code>## model parameters
+> model
+Random Forest 
+
+13737 samples
+   52 predictor
+    5 classes: 'A', 'B', 'C', 'D', 'E' 
+
+No pre-processing
+Resampling: Cross-Validated (4 fold) 
+Summary of sample sizes: 10302, 10303, 10303, 10303 
+Resampling results across tuning parameters:
+
+  mtry  Accuracy   Kappa      Accuracy SD  Kappa SD   
+   2    0.9905366  0.9880278  0.001848844  0.002339002
+  27    0.9899541  0.9872915  0.002383897  0.003015493
+  52    0.9847126  0.9806603  0.005533562  0.006999712
+
+Accuracy was used to select the optimal model using  the largest value.
+The final value used for the model was mtry = 2. 
+</code></pre>
+
+<pre><code>## model parameters "LONG"
+
+> model
+Random Forest 
+
+13737 samples
+   52 predictor
+    5 classes: 'A', 'B', 'C', 'D', 'E' 
+
+No pre-processing
+Resampling: Bootstrapped (25 reps) 
+Summary of sample sizes: 13737, 13737, 13737, 13737, 13737, 13737, ... 
+Resampling results across tuning parameters:
+
+  mtry  Accuracy   Kappa      Accuracy SD  Kappa SD   
+   2    0.9891180  0.9862330  0.001314367  0.001652792
+  27    0.9881277  0.9849809  0.002020502  0.002547148
+  52    0.9797452  0.9743788  0.004397739  0.005549244
+
+Accuracy was used to select the optimal model using  the largest value.
+The final value used for the model was mtry = 2. 
+</code></pre>
+
